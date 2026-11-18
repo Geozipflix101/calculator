@@ -1,4 +1,4 @@
-const CACHE = 'calc-v2';
+const CACHE = 'calc-v3';
 const FILES = [
   './',
   './index.html',
@@ -9,7 +9,13 @@ const FILES = [
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches.open(CACHE)
+      .then(c => Promise.all(FILES.map(f =>
+        fetch(f, { cache: 'reload' }).then(r => r.ok ? c.put(f, r) : null)
+      )))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', e => {
@@ -23,6 +29,14 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   e.respondWith(
-    caches.match(e.request).then(hit => hit || fetch(e.request).catch(() => caches.match('./index.html')))
+    fetch(e.request, { cache: 'no-cache' })
+      .then(res => {
+        if (res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then(c => c.put(e.request, copy));
+        }
+        return res;
+      })
+      .catch(() => caches.match(e.request).then(hit => hit || caches.match('./index.html')))
   );
 });
